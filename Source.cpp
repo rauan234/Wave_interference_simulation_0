@@ -202,6 +202,8 @@ double size_constancy_coefficient = 1;
 double output_power_coefficient = 1;
 double output_dissipation_coefficient = 1;
 
+bool ShowInLogarithmicScale = 1;
+
 class Shape {
 private:
 	double getintensity(double x1, double y1, double z1) {
@@ -249,7 +251,55 @@ private:
 			A += dA;
 		}
 
-		return sqrt(x_val * x_val + y_val * y_val);  // return value from 0 to 1
+		return sqrt(x_val * x_val + y_val * y_val);
+	}
+	phasor getphasor(double x1, double y1, double z1) {
+		vector out;
+		out.x = 0;
+		out.y = 0;
+
+		double x2, y2;  // z2 is always zero
+		double range_squear;
+		double phase_shift;
+
+		double r;
+		double A = 0;
+		double dA = 0.1;
+		while (A < 2 * pi) {
+			double dr = 1;
+
+			r = 0;
+			while (r < d1 / 2) {
+				x2 = r * cos(A) + XSize / 2;
+				y2 = r * sin(A) + YSize / 2;
+
+				range_squear = (x1 - x2) * (x1 - x2) + (y1 - y2) * (y1 - y2) + z1 * z1;
+				phase_shift = 2 * pi * sqrt(range_squear) / L;
+
+				out.x += r * dA * dr * cos(phase_shift) / range_squear;
+				out.y += r * dA * dr * sin(phase_shift) / range_squear;
+
+				r += dr;
+			}
+
+			r = R - d2 / 2;
+			while (r < R + d2 / 2) {
+				x2 = r * cos(A) + XSize / 2;
+				y2 = r * sin(A) + YSize / 2;
+
+				range_squear = (x1 - x2) * (x1 - x2) + (y1 - y2) * (y1 - y2) + z1 * z1;
+				phase_shift = 2 * pi * sqrt(range_squear) / L;
+
+				out.x += r * dA * dr * cos(phase_shift) / range_squear;
+				out.y += r * dA * dr * sin(phase_shift) / range_squear;
+
+				r += dr;
+			}
+
+			A += dA;
+		}
+
+		return phasor(out);
 	}
 	double getintensityafterwall(double x1, double y1, double d1, phasor* intensity_list) {
 		double x_val = 0;
@@ -277,10 +327,41 @@ private:
 			}
 		}
 
-		return sqrt(x_val * x_val + y_val * y_val);  // return value from 0 to 1
+		return sqrt(x_val * x_val + y_val * y_val);
+	}
+	phasor getphasorafterwall(double x1, double y1, double d1, phasor* intensity_list) {
+		vector out;
+		out.x = 0;
+		out.y = 0;
+
+		phasor p;
+		double range_squear;
+		double xcor, ycor;
+		double dA = 0.1;
+		for (double A = 0; A < 2 * pi; A += dA) {
+			for (ush r = 0; r < hole_radius; r++) {
+				p = intensity_list[r];
+
+				xcor = r * cos(A) + XSize / 2;
+				ycor = r * sin(A) + YSize / 2;
+
+				if (p.magnitude != 0) {
+					range_squear = (xcor - x1) * (xcor - x1) + (ycor - y1) * (ycor - y1) + d1 * d1;
+
+					p.phase += 2 * pi * sqrt(range_squear) / L;
+
+					out.x += dA * r * sin(p.phase) * p.magnitude / range_squear;
+					out.y += dA * r * cos(p.phase) * p.magnitude / range_squear;
+				}
+			}
+		}
+
+		return phasor(out);
 	}
 	vector getintensityonwall(double x1, double y1) {
 		vector out;
+		out.x = 0;
+		out.y = 0;
 
 		double x2, y2;  // z2 is always zero
 		double range_squear;
@@ -326,40 +407,26 @@ private:
 		return out;
 	}
 	double calc_goodness() {
-		get_radius(H, 1);
-
 		if (check_validity()) {
-			wave_r1 = get_radius(H * 2, 0);
-			contrast = 1 - pow(minimal_intensity / maximal_intensity, 2);
-			size_allignment = 1 - abs(hole_radius - R) / (hole_radius + R);
-			size_constancy = pow(min(hole_radius, wave_r1) / max(hole_radius, wave_r1), 2);
-
 			for (ush r = 0; r < hole_radius; r++) {
 				intensity_profile[r] = getintensityonwall(XSize / 2, YSize / 2 + r);
 			}
 			output_power = 0;
 			output_dissipation = 0;
-			for (ush d = 0; d < L * 100; d += L / 4) {
+			for (ush d = 0; d < L * 20; d += L / 4) {
+				output_dissipation += pow(getintensityafterwall(XSize / 2 + L * 4, YSize / 2, L * 5, intensity_profile) / 0.02, 3);
+			}
+			for (ush d = 2 * L; d < L * 20; d += L / 4) {
 				output_power += pow(getintensityafterwall(XSize / 2, YSize / 2, L * 5, intensity_profile) / 0.02, 3);
-				output_dissipation += pow(getintensityafterwall(XSize / 2 + hole_radius * 2, YSize / 2, L * 5, intensity_profile) / 0.02, 3);
 			}
 
 			goodness = 0;
-			goodness += contrast * 3 * contrast_coefficient;
-			goodness += size_allignment * 1 * size_allignment_coefficient;
-			goodness += size_constancy * 10 * size_constancy_coefficient;
-			goodness += output_power * 0.01 * output_power_coefficient;
-			goodness -= output_dissipation * 500 * output_dissipation_coefficient;
+			goodness += output_power * 0.05 * output_power_coefficient;
+			goodness -= output_dissipation * 420 * output_dissipation_coefficient;
+			goodness += 0.0036 * output_power / output_dissipation;
 		}
 		else {
-			hole_radius = 0;
-			wave_r1 = 0;
-			goodness = 0;
-			maximal_intensity = 0;
-			minimal_intensity = 0;
-			contrast = 0;
-			size_allignment = 0;
-			size_constancy = 0;
+			goodness = -INT32_MAX;
 		}
 
 		return goodness;
@@ -390,7 +457,7 @@ public:
 	double d2 = 1.0088;            // width of the ring hole
 	double L = 15;                 // wavelength of the soundwave
 	double H = 12.8219;            // viewing distance
-	double hole_radius = 59.0000;  // output wave radius
+	double hole_radius = 59.0000;  // output hole radius
 						   /*
 						   there is a flat sound absorbing surface
 						   inside that surface there is a circular hole with diameter d1
@@ -400,19 +467,11 @@ public:
 						   */
 
 	double goodness;
-	double contrast;
-	double size_allignment;
-	double size_constancy;
 	double output_power;
 	double output_dissipation;
-	bool has_a_zero_point;
-
-	double minimal_intensity = INT32_MAX;
-	double maximal_intensity = 0;
-	double wave_r1 = 0; // output wave radius on double distance
 
 	Shape() {
-		hole_radius = 50;
+
 	}
 	void print_data() {
 		calc_goodness();
@@ -427,18 +486,10 @@ public:
 		cout << "Output hole diameter:                     " << hole_radius * 2 << endl;
 		cout << "Wavelength:                               " << L << endl;
 		cout << endl;
-		cout << "Minimal sound intensity:                  " << minimal_intensity << endl;
-		cout << "Maximal sound intensity:                  " << maximal_intensity << endl;
-		cout << "Output wave diameter:                     " << get_radius(H, 1) * 2 << endl;
-		cout << "Output wave diameter on double distance:  " << wave_r1 * 2 << endl;
-		cout << endl;
 		cout << "Relative goodness:                        " << goodness << endl;
-		cout << "Contrast:                                 " << contrast << endl;
-		cout << "Output wave size allignment:              " << size_allignment << endl;
-		cout << "Output wave size constancy:               " << size_constancy << endl;
 		cout << "Wave after wall power:                    " << output_power << endl;
 		cout << "Wave after wall dissipaton:               " << output_dissipation << endl;
-		cout << "Has a minimum:                            " << has_a_zero_point << endl;
+		cout << "Wave power to dissipation ratio:          " << output_power / output_dissipation << endl;
 		cout << "------------------------------------------------------------------------" << endl;
 		cout << endl;
 	}
@@ -505,13 +556,13 @@ public:
 			cout << "*********************************************************" << endl;
 		}
 	}
-	void optimize() {
+	void successive_approach(double start_optimisation_value, double end_optimisation_value, double step) {
 		cout << endl << "Optimisation started" << endl << endl;
 
 		cout << "Start data:" << endl;
 		print_data();
 
-		for (double optimisation_coefficient = 1; optimisation_coefficient > 0.05; optimisation_coefficient -= 0.05) {
+		for (double optimisation_coefficient = start_optimisation_value; optimisation_coefficient > end_optimisation_value; optimisation_coefficient -= step) {
 			find_local_maximum(25, optimisation_coefficient, 0, 0);
 		}
 
@@ -520,68 +571,114 @@ public:
 
 		cout << endl << "Optimisation ended" << endl << endl;
 	}
+	void picking_method() {
+		Shape other;
+
+		double Rstart = L; double Rend = L * 3; double dR = L / 3;
+		double Hstart = L / 2; double Hend = L * 2; double dH = L / 4;
+		double d1start = L / 2; double d1end = L * 3; double dd1 = L / 2;
+		double d2start = L / 15; double d2end = L / 3; double dd2 = L / 15;
+		double nhrstart = L / 2; double nhrend = L * 4; double dnhr = L / 2;
+
+		calc_goodness();
+		for (double new_R = Rstart; new_R < Rend; new_R += L / 2) {
+			for (double new_H = Hstart; new_H < Hend; new_H += L) {
+				for (double new_d1 = d1start; new_d1 < d1end; new_d1 += L / 2) {
+					for (double new_d2 = d2start; new_d2 < d2end; new_d2 += L / 10) {
+						for (double new_hole_radius = nhrstart; new_hole_radius < nhrend; new_hole_radius += dnhr) {
+							other.R = new_R;
+							other.H = new_H;
+							other.d1 = new_d1;
+							other.d2 = new_d2;
+							other.hole_radius = new_hole_radius;
+
+							cout << "Attempt data: " << new_R << ' ' << new_H << ' ' << new_d1 << ' ' << new_d2 << ' ' << new_hole_radius << endl;
+
+							other.calc_goodness();
+							if (other.goodness > goodness) {
+								cout << "Found new best!" << endl;
+
+								*this = other;
+								successive_approach(0.1, 0.01, 0.01);
+								show_after_wall();
+							}
+						}
+					}
+				}
+			}
+		}
+	}
 	bool check_validity() {
-		if (H < L / 2) {
+		if (H < L / 2 - 1) {
 			return 0;
 		}
 		if (R - d2 / 2 <= d1 / 2) {
 			return 0;
 		}
+		if (hole_radius <= L / 2) {
+			return 0;
+		}
+		if (hole_radius >= XSize * 2) {
+			return 0;
+		}
 
 		return 1;
 	}
-	double get_radius(double h, bool globalize) {
-		double out;
-
-		double minimal = INT32_MAX;
-		double maximal = 0;
-		bool zero_point = 0;
-		double old = getintensity(XSize / 2, YSize / 2, h);
-		for (ush new_r = 1; new_r < XSize / 2; new_r++) {
-			double intensity = getintensity(XSize / 2, YSize / 2 + new_r, h);
-
-			if (intensity > old) {
-				if (intensity < minimal) {
-					out = new_r;
-					zero_point = 1;
-					minimal = old;
-				}
-			}
-			if (intensity > maximal) {
-				maximal = intensity;
-			}
-
-			old = intensity;
-		}
-
-		if (globalize) {
-			minimal_intensity = minimal;
-			maximal_intensity = maximal;
-			has_a_zero_point = zero_point;
-		}
-
-		return out;
-	}
 	double show_slice() {
-		minimal_intensity = INT32_MAX;
-		maximal_intensity = 0;
-
 		byte color[3];
 		double intensity;
 		for (ush xcor = 0; xcor < XSize; xcor++) {
 			for (ush ycor = 0; ycor < YSize; ycor++) {
 				intensity = getintensity(xcor, ycor, H);
 
-				if (intensity > maximal_intensity) {
-					maximal_intensity = intensity;
+				if ((((abs(xcor - XSize / 2) == int(hole_radius)) || (abs(ycor - YSize / 2) == int(hole_radius))) && ((ycor == YSize / 2) || xcor == XSize / 2))) {
+					color[0] = 0;
+					color[1] = 0;
+					color[2] = 0;
 				}
-				if (intensity < minimal_intensity) {
-					minimal_intensity = intensity;
+				else {
+					double val;
+					if (ShowInLogarithmicScale) {
+						val = log10(intensity * 3000 + 10);
+					}
+					else {
+						val = pow(intensity, 0.15) * pi;
+					}
+					color[0] = 127 * (1 + sin(val * 0.5 + pi * 0));
+					color[1] = 127 * (1 + sin(val * 1 + pi * 0));
+					color[2] = 117 * (1 + sin(val * 0.5 + pi * 0.5));
 				}
 
-				color[0] = 127 * (1 + sin(pow(intensity, 0.15) * pi * 0.5 + pi * 0));
-				color[1] = 127 * (1 + sin(pow(intensity, 0.15) * pi * 1 + pi * 0));
-				color[2] = 117 * (1 + sin(pow(intensity, 0.15) * pi * 0.5 + pi * 0.5));
+				for (ush dx = 0; dx < Magnification; dx++) {
+					for (ush dy = 0; dy < Magnification; dy++) {
+						main_image.draw_point(xcor * Magnification + dx, ycor * Magnification + dy, color, 1);
+					}
+				}
+			}
+		}
+		main_image.display(main_display);
+
+		calc_goodness();
+
+		return goodness;
+	}
+	double show_slice_phase() {
+		byte color[3];
+		phasor p;
+		for (ush xcor = 0; xcor < XSize; xcor++) {
+			for (ush ycor = 0; ycor < YSize; ycor++) {
+				if ((((abs(xcor - XSize / 2) == int(hole_radius)) || (abs(ycor - YSize / 2) == int(hole_radius))) && ((ycor == YSize / 2) || xcor == XSize / 2))) {
+					color[0] = 0;
+					color[1] = 0;
+					color[2] = 0;
+				}
+				else {
+					p = getphasor(xcor, ycor, H);
+
+					color[0] = 127 * (1 + sin(p.phase));
+					color[1] = 127 * (1 + sin(p.phase + pi / 2));
+					color[2] = 117 * (1 + sin(p.phase + pi));
+				}
 
 				for (ush dx = 0; dx < Magnification; dx++) {
 					for (ush dy = 0; dy < Magnification; dy++) {
@@ -603,9 +700,55 @@ public:
 			for (ush ycor = 0; ycor <= YSize / 2; ycor++) {
 				intensity = getintensity(XSize / 2, ycor, h);
 
-				color[0] = 127 * (1 + sin(pow(intensity, 0.15) * pi * 0.5 + pi * 0));
-				color[1] = 127 * (1 + sin(pow(intensity, 0.15) * pi * 1 + pi * 0));
-				color[2] = 117 * (1 + sin(pow(intensity, 0.15) * pi * 0.5 + pi * 0.5));
+				if ((h == int(H)) & ((ycor == YSize / 2 - int(hole_radius)) | (ycor == YSize / 2 + int(hole_radius)))) {
+					color[0] = 0;
+					color[1] = 0;
+					color[2] = 0;
+				}
+				else {
+					double val;
+					if (ShowInLogarithmicScale) {
+						val = log10(intensity * 3000 + 10);
+					}
+					else {
+						val = pow(intensity, 0.15) * pi;
+					}
+					color[0] = 127 * (1 + sin(val * 0.5 + pi * 0));
+					color[1] = 127 * (1 + sin(val * 1 + pi * 0));
+					color[2] = 117 * (1 + sin(val * 0.5 + pi * 0.5));
+				}
+
+				for (ush dx = 0; dx < Magnification; dx++) {
+					for (ush dy = 0; dy < Magnification; dy++) {
+						main_image.draw_point((h - 1) * Magnification + dx, ycor * Magnification + dy, color, 1);
+						main_image.draw_point((h - 1) * Magnification + dx, YSize * Magnification - ycor * Magnification - dy, color, 1);
+					}
+				}
+			}
+		}
+		main_image.display(main_display);
+
+		calc_goodness();
+
+		return goodness;
+	}
+	double show_profile_phase() {
+		byte color[3];
+		phasor p;
+		for (ush h = 1; h < XSize + 1; h++) {
+			for (ush ycor = 0; ycor <= YSize / 2; ycor++) {
+				if ((h == int(H)) & ((ycor == YSize / 2 - int(hole_radius)) | (ycor == YSize / 2 + int(hole_radius)))) {
+					color[0] = 0;
+					color[1] = 0;
+					color[2] = 0;
+				}
+				else {
+					p = getphasor(XSize / 2, ycor, h);
+
+					color[0] = 127 * (1 + sin(p.phase));
+					color[1] = 127 * (1 + sin(p.phase + pi / 2));
+					color[2] = 117 * (1 + sin(p.phase + pi));
+				}
 
 				for (ush dx = 0; dx < Magnification; dx++) {
 					for (ush dy = 0; dy < Magnification; dy++) {
@@ -622,8 +765,6 @@ public:
 		return goodness;
 	}
 	double show_after_wall() {
-		get_radius(H, 1);
-
 		for (ush r = 0; r < hole_radius; r++) {
 			intensity_profile[r] = getintensityonwall(XSize / 2, YSize / 2 + r);
 		}
@@ -632,11 +773,62 @@ public:
 		double intensity;
 		for (ush d = 1; d < XSize + 1; d++) {
 			for (ush ycor = 0; ycor <= YSize / 2; ycor++) {
-				intensity = getintensityafterwall(XSize / 2, ycor, d, intensity_profile);
+				if ((d == 2) & ((ycor == YSize / 2 - int(hole_radius)) | (ycor == YSize / 2 + int(hole_radius)))) {
+					color[0] = 0;
+					color[1] = 0;
+					color[2] = 0;
+				}
+				else {
+					intensity = getintensityafterwall(XSize / 2, ycor, d, intensity_profile);
 
-				color[0] = 127 * (1 + sin(pow(intensity, 0.15) * pi * 0.5 + pi * 0));
-				color[1] = 127 * (1 + sin(pow(intensity, 0.15) * pi * 1 + pi * 0));
-				color[2] = 117 * (1 + sin(pow(intensity, 0.15) * pi * 0.5 + pi * 0.5));
+					double val;
+					if (ShowInLogarithmicScale) {
+						val = log10(intensity * 3000 + 10);
+					}
+					else {
+						val = pow(intensity, 0.15) * pi;
+					}
+					color[0] = 127 * (1 + sin(val * 0.5 + pi * 0));
+					color[1] = 127 * (1 + sin(val * 1 + pi * 0));
+					color[2] = 117 * (1 + sin(val * 0.5 + pi * 0.5));
+				}
+
+				for (ush dx = 0; dx < Magnification; dx++) {
+					for (ush dy = 0; dy < Magnification; dy++) {
+						main_image.draw_point((d - 1) * Magnification + dx, ycor * Magnification + dy, color, 1);
+						main_image.draw_point((d - 1) * Magnification + dx, YSize * Magnification - ycor * Magnification - dy, color, 1);
+					}
+				}
+			}
+		}
+		main_image.display(main_display);
+
+		calc_goodness();
+		print_data();
+
+		return 0;
+	}
+	double show_after_wall_phase() {
+		for (ush r = 0; r < hole_radius; r++) {
+			intensity_profile[r] = getintensityonwall(XSize / 2, YSize / 2 + r);
+		}
+
+		byte color[3];
+		phasor p;
+		for (ush d = 1; d < XSize + 1; d++) {
+			for (ush ycor = 0; ycor <= YSize / 2; ycor++) {
+				if ((d == 2) & ((ycor == YSize / 2 - int(hole_radius)) | (ycor == YSize / 2 + int(hole_radius)))) {
+					color[0] = 0;
+					color[1] = 0;
+					color[2] = 0;
+				}
+				else {
+					p = getphasorafterwall(XSize / 2, ycor, d, intensity_profile);
+
+					color[0] = 127 * (1 + sin(p.phase));
+					color[1] = 127 * (1 + sin(p.phase + pi / 2));
+					color[2] = 117 * (1 + sin(p.phase + pi));
+				}
 
 				for (ush dx = 0; dx < Magnification; dx++) {
 					for (ush dy = 0; dy < Magnification; dy++) {
@@ -679,28 +871,39 @@ void Showhelp() {
 	cout << "        shows shape data" << endl << endl;
 	cout << "    show slice" << endl;
 	cout << "        shows wave slice on chosen H" << endl << endl;
+	cout << "    show slice phase" << endl;
+	cout << "        shows wave phase slice on chosen H" << endl << endl;
 	cout << "    show profile" << endl;
 	cout << "        shows wave profile" << endl << endl;
+	cout << "    show profile phase" << endl;
+	cout << "        shows wave phase profile before the wall" << endl << endl;
 	cout << "    show after wall" << endl;
 	cout << "        shows wave profile after exiting the wall" << endl << endl;
-	cout << "    optimize" << endl;
-	cout << "        automatically optimizes the shape" << endl << endl;
+	cout << "    show after wall phase" << endl;
+	cout << "        shows wave phase profile after exiting the wall" << endl << endl;
+	cout << "    successive approach" << endl;
+	cout << "        relatively fast and effective way to optimize the shape to a closest maximum" << endl << endl;
+	cout << "    picking method" << endl;
+	cout << "        slowly, but surely finds best shape properties" << endl;
+	cout << "    local maximum" << endl;
+	cout << "        a very fast way to bring your shape to the closest maximum. not reccomended to use, since it does not work very well.";
 	cout << "    H" << endl;
-	cout << "        changes value of H" << endl << endl;
+	cout << "        changes value of viewing height" << endl << endl;
 	cout << "    R" << endl;
-	cout << "        changes value of R" << endl << endl;
+	cout << "        changes value of ring hole radius" << endl << endl;
 	cout << "    r" << endl;
-	cout << "        changes value of r" << endl << endl;
+	cout << "        changes value of output hole radius" << endl << endl;
 	cout << "    d1" << endl;
-	cout << "        changes value of d1" << endl << endl;
+	cout << "        changes value of circle hole diameter" << endl << endl;
 	cout << "    d2" << endl;
-	cout << "        changes value of d2" << endl << endl;
+	cout << "        changes value of ring hole width" << endl << endl;
 	cout << "    L" << endl;
-	cout << "        changes value of L" << endl;
+	cout << "        changes value of wavelength" << endl;
 	cout << endl;
 	cout << "Red color on wave visualisation means, that the amplitude of the wave is high" << endl;
 	cout << "Green color on wave visualisation means, that the amplitude of the wave is medium" << endl;
 	cout << "Red color on wave visualisation means, that the amplitude of the wave is low" << endl;
+	cout << "Black dots on visualisations represent wall edges" << endl;
 	cout << endl;
 }
 void Execute(std::string command) {
@@ -719,12 +922,23 @@ void Execute(std::string command) {
 		main_shape.show_slice();
 		main_shape.print_data();
 	}
+	else if (command == "show slice phase") {
+		main_shape.show_slice_phase();
+		main_shape.print_data();
+	}
 	else if (command == "show profile") {
 		main_shape.show_profile();
 		main_shape.print_data();
 	}
+	else if (command == "show profile phase") {
+		main_shape.show_profile_phase();
+		main_shape.print_data();
+	}
 	else if (command == "show after wall") {
 		main_shape.show_after_wall();
+	}
+	else if (command == "show after wall phase") {
+		main_shape.show_after_wall_phase();
 	}
 	else if (command == "local maximum") {
 		ush number_of_iterations;
@@ -735,8 +949,11 @@ void Execute(std::string command) {
 		cin >> optimisation_value;
 		main_shape.find_local_maximum(number_of_iterations, optimisation_value, 1, 0.3);
 	}
-	else if (command == "optimize") {
-		main_shape.optimize();
+	else if (command == "successive approach") {
+		main_shape.successive_approach(1, 0.1, 0.1);
+	}
+	else if (command == "picking method") {
+		main_shape.picking_method();
 	}
 	else if (command == "H") {
 		cout << endl;
