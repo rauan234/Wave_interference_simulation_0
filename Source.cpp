@@ -1018,7 +1018,7 @@ void Showhelp() {
 	cout << "    save image" << endl;
 	cout << "        saves current screen image in a file" << endl << endl;
 	cout << "    get intensity in point" << endl;
-	cout << "        you tap on a point on a simulation and get intensity in that point" << endl;
+	cout << "        you tap on a point on a simulation and get intensity in that point" << endl << endl;
 	cout << "    show data" << endl;
 	cout << "        shows shape data" << endl << endl;
 	cout << "    show inner wave slice" << endl;
