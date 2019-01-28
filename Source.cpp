@@ -28,7 +28,7 @@ using namespace std;
 
 
 Image       main_image(XSize * Magnification, YSize * Magnification, 1, 3);
-CImgDisplay main_display(main_image);
+CImgDisplay main_display(main_image, "Simulation");
 
 
 
@@ -196,11 +196,12 @@ public:
 
 
 
-double contrast_coefficient = 1;
-double size_allignment_coefficient = 1;
-double size_constancy_coefficient = 1;
 double output_power_coefficient = 1;
 double output_dissipation_coefficient = 1;
+double output_power_to_dissipation_ratio_coefficient = 1;
+double output_power_on_target_distance_coefficient = 1;
+double output_dissipation_on_target_distance_coefficient = 1;
+double output_power_to_dissipation_ratio_on_target_distance_coefficient = 1;
 
 bool ShowInLogarithmicScale = 1;
 
@@ -413,17 +414,37 @@ private:
 			}
 			output_power = 0;
 			output_dissipation = 0;
-			for (ush d = 0; d < L * 20; d += L / 4) {
-				output_dissipation += pow(getintensityafterwall(XSize / 2 + L * 4, YSize / 2, L * 5, intensity_profile) / 0.02, 3);
+			for (double d = 0; d < L * 20; d += L / 4) {
+				output_dissipation += pow(getintensityafterwall(XSize / 2 + L * 4, YSize / 2, d, intensity_profile) / 0.02, 3);
 			}
-			for (ush d = 2 * L; d < L * 20; d += L / 4) {
-				output_power += pow(getintensityafterwall(XSize / 2, YSize / 2, L * 5, intensity_profile) / 0.02, 3);
+			for (double d = 2 * L; d < L * 20; d += L / 4) {
+				output_power += pow(getintensityafterwall(XSize / 2, YSize / 2, d, intensity_profile) / 0.02, 3);
+			}
+			output_power_on_target_distance = 0;
+			output_dissipation_on_target_distance = 0;
+			double dA = 0.05;
+			double power_area_angle = pi / 18;
+			double target_distance = L * 20;
+			for (double A = 0; A < power_area_angle; A += dA) {
+				output_power_on_target_distance += target_distance * target_distance * A * dA * pow(getintensityafterwall(XSize / 2,
+					YSize / 2 + target_distance * sin(A),
+					target_distance * cos(A),
+					intensity_profile) / 0.02, 3);
+			}
+			for (double A = power_area_angle; A < pi / 2; A += dA) {
+				output_dissipation_on_target_distance += target_distance * target_distance * A * dA * pow(getintensityafterwall(XSize / 2,
+					YSize / 2 + target_distance * sin(A),
+					target_distance * cos(A),
+					intensity_profile) / 0.02, 3);
 			}
 
 			goodness = 0;
-			goodness += output_power * 0.05 * output_power_coefficient;
-			goodness -= output_dissipation * 420 * output_dissipation_coefficient;
-			goodness += 0.0036 * output_power / output_dissipation;
+			goodness += output_power * 0.03 * output_power_coefficient;
+			goodness += output_power_on_target_distance * 20000 * output_power_on_target_distance_coefficient;
+			goodness -= output_dissipation * 1840 * output_dissipation_coefficient;
+			goodness -= output_dissipation_on_target_distance *  32800 * output_dissipation_on_target_distance_coefficient;
+			goodness += 0.025 * output_power / output_dissipation * output_power_to_dissipation_ratio_coefficient;
+			goodness += 2840 * pow(output_power_on_target_distance / output_dissipation_on_target_distance, 2) * output_power_to_dissipation_ratio_on_target_distance_coefficient;
 		}
 		else {
 			goodness = -INT32_MAX;
@@ -452,12 +473,12 @@ private:
 	phasor intensity_profile[XSize * 2];
 
 public:
-	double R = 13.7777;            // ring hole radius
-	double d1 = 9.1875;            // diameter of the inner hole
-	double d2 = 1.0088;            // width of the ring hole
+	double R = 26.46;              // ring hole radius
+	double d1 = 37.5;              // diameter of the inner hole
+	double d2 = 3.616;             // width of the ring hole
 	double L = 15;                 // wavelength of the soundwave
-	double H = 12.8219;            // viewing distance
-	double hole_radius = 59.0000;  // output hole radius
+	double H = 6.548;              // viewing distance
+	double hole_radius = 45;       // output hole radius
 						   /*
 						   there is a flat sound absorbing surface
 						   inside that surface there is a circular hole with diameter d1
@@ -469,6 +490,8 @@ public:
 	double goodness;
 	double output_power;
 	double output_dissipation;
+	double output_power_on_target_distance;
+	double output_dissipation_on_target_distance;
 
 	Shape() {
 
@@ -477,20 +500,23 @@ public:
 		calc_goodness();
 
 		cout << endl;
-		cout << "------------------------------------------------------------------------" << endl;
-		cout << "Viewing height:                           " << H << endl;
+		cout << "-----------------------------------------------------------------------------------------" << endl;
+		cout << "Viewing height:                                            " << H << endl;
 		cout << endl;
-		cout << "Inner hole diameter:                      " << d1 << endl;
-		cout << "Ring hole radius:                         " << R << endl;
-		cout << "Ring hole width:                          " << d2 << endl;
-		cout << "Output hole diameter:                     " << hole_radius * 2 << endl;
-		cout << "Wavelength:                               " << L << endl;
+		cout << "Inner hole diameter:                                       " << d1 << endl;
+		cout << "Ring hole radius:                                          " << R << endl;
+		cout << "Ring hole width:                                           " << d2 << endl;
+		cout << "Output hole diameter:                                      " << hole_radius * 2 << endl;
+		cout << "Wavelength:                                                " << L << endl;
 		cout << endl;
-		cout << "Relative goodness:                        " << goodness << endl;
-		cout << "Wave after wall power:                    " << output_power << endl;
-		cout << "Wave after wall dissipaton:               " << output_dissipation << endl;
-		cout << "Wave power to dissipation ratio:          " << output_power / output_dissipation << endl;
-		cout << "------------------------------------------------------------------------" << endl;
+		cout << "Relative goodness:                                         " << goodness << endl;
+		cout << "Wave after wall power:                                     " << output_power << endl;
+		cout << "Wave after wall dissipaton:                                " << output_dissipation << endl;
+		cout << "Wave after wall power on target distance:                  " << output_power_on_target_distance << endl;
+		cout << "Wave after wall dissipaton on target distance:             " << output_dissipation_on_target_distance << endl;
+		cout << "Wave power to dissipation ratio:                           " << output_power / output_dissipation << endl;
+		cout << "Wave power to dissipation ratio on target distance:        " << output_power_on_target_distance / output_dissipation_on_target_distance << endl;
+		cout << "-----------------------------------------------------------------------------------------" << endl;
 		cout << endl;
 	}
 	void operator=(Shape other) {
@@ -571,6 +597,37 @@ public:
 
 		cout << endl << "Optimisation ended" << endl << endl;
 	}
+	void get_intensity_in_point() {
+		cout << "Wait, until the image shows up" << endl;
+		show_after_wall();
+
+		cout << "Tap on the picture to get intensity in that point" << endl;
+		cout << "Press 'S' to stop" << endl;
+
+		bool brk = 0;
+		while (1) {
+			if (GetKeyState('S') & 0x8000) {
+				break;
+			}
+			else {
+				while (!main_display.button() & 1) {
+					Sleep(5);
+					if (GetKeyState('S') & 0x8000) {
+						brk = 1;
+						break;
+					}
+				}
+				if (brk) {
+					break;
+				}
+
+				double x = main_display.mouse_x() / Magnification;
+				double y = main_display.mouse_y() / Magnification;
+				cout << "Intensity in chosen point " << "(" << x << " " << y << ")" << ": " << getintensityafterwall(XSize / 2, y, x, intensity_profile) << endl;
+				Sleep(100);
+			}
+		}
+	}
 	void picking_method() {
 		Shape other;
 
@@ -625,6 +682,8 @@ public:
 		return 1;
 	}
 	double show_slice() {
+		cout << "Loading image..." << endl;
+
 		byte color[3];
 		double intensity;
 		for (ush xcor = 0; xcor < XSize; xcor++) {
@@ -663,6 +722,8 @@ public:
 		return goodness;
 	}
 	double show_slice_phase() {
+		cout << "Loading image..." << endl;
+
 		byte color[3];
 		phasor p;
 		for (ush xcor = 0; xcor < XSize; xcor++) {
@@ -694,6 +755,8 @@ public:
 		return goodness;
 	}
 	double show_profile() {
+		cout << "Loading image..." << endl;
+
 		byte color[3];
 		double intensity;
 		for (ush h = 1; h < XSize + 1; h++) {
@@ -733,6 +796,8 @@ public:
 		return goodness;
 	}
 	double show_profile_phase() {
+		cout << "Loading image..." << endl;
+
 		byte color[3];
 		phasor p;
 		for (ush h = 1; h < XSize + 1; h++) {
@@ -765,6 +830,8 @@ public:
 		return goodness;
 	}
 	double show_after_wall() {
+		cout << "Loading image..." << endl;
+
 		for (ush r = 0; r < hole_radius; r++) {
 			intensity_profile[r] = getintensityonwall(XSize / 2, YSize / 2 + r);
 		}
@@ -809,6 +876,8 @@ public:
 		return 0;
 	}
 	double show_after_wall_phase() {
+		cout << "Loading image..." << endl;
+
 		for (ush r = 0; r < hole_radius; r++) {
 			intensity_profile[r] = getintensityonwall(XSize / 2, YSize / 2 + r);
 		}
@@ -850,6 +919,83 @@ Shape main_shape;
 
 
 
+void Showsettings() {
+	cout << "Current settings:" << endl;
+	cout << "    Image settings:" << endl;
+	cout << "	      0.0 show in logarithmic scale: " << ShowInLogarithmicScale << endl;
+	cout << "              // if 1, wave simulations will be shown in logarithmic scale. Else, they will be shown in pow(0.15) scale." << endl;
+	cout << endl;
+	cout << "    Goodness calculation settings:" << endl;
+	cout << "        1.0 Output average power coefficient:                                                    " << output_power_coefficient << endl;
+	cout << "        1.1 Output average dissipation coefficient:                                              " << output_dissipation_coefficient << endl;
+	cout << "        1.2 Output average power to average dissipation ratio coefficient:                       " << output_power_to_dissipation_ratio_coefficient << endl;
+	cout << "        1.3 Output power on target distance coefficient:                                         " << output_power_coefficient << endl;
+	cout << "        1.4 Output dissipation on target distance coefficient:                                   " << output_dissipation_coefficient << endl;
+	cout << "        1.5 Output power on target distance to dissipation on target distance ratio coefficient: " << output_power_to_dissipation_ratio_coefficient << endl;
+	cout << "             // goodness is a value, that determines, how good the shape is." << endl;
+	cout << "             // it`s a key component of artificial evolution that you use in this program" << endl;
+	cout << "             // to calculate goodness, the program calculates shape properties, for example average output power" << endl;
+	cout << "             // goodness is a sum of various shape properties, multiplied by an appropriate coefficient" << endl;
+	cout << "             // so, if you change coefficients, what you do is you change evolution criteria." << endl;
+
+}
+void Settings() {
+	Showsettings();
+
+	cout << endl;
+	cout << "To exit settings, enter 'exit'" << endl;
+	cout << "To change a program parameter, enter parameter code." << endl;
+	cout << "For example, 1.4 means 'Output dissipation on target distance  coefficient'" << endl;
+	cout << endl;
+
+	string command;
+	while (1) {
+		cout << "Enter number: ";
+		getline(cin, command);
+
+		if (command == "exit") {
+			break;
+		}
+		else if (command == "0.0") {
+			cin >> ShowInLogarithmicScale;
+			cin.ignore(numeric_limits<streamsize>::max(), '\n');
+			cin.clear();
+		}
+		else if (command == "1.0") {
+			cin >> output_power_coefficient;
+			cin.ignore(numeric_limits<streamsize>::max(), '\n');
+			cin.clear();
+		}
+		else if (command == "1.1") {
+			cin >> output_dissipation_coefficient;
+			cin.ignore(numeric_limits<streamsize>::max(), '\n');
+			cin.clear();
+		}
+		else if (command == "1.2") {
+			cin >> output_power_to_dissipation_ratio_coefficient;
+			cin.ignore(numeric_limits<streamsize>::max(), '\n');
+			cin.clear();
+		}
+		else if (command == "1.3") {
+			cin >> output_power_on_target_distance_coefficient;
+			cin.ignore(numeric_limits<streamsize>::max(), '\n');
+			cin.clear();
+		}
+		else if (command == "1.4") {
+			cin >> output_dissipation_on_target_distance_coefficient;
+			cin.ignore(numeric_limits<streamsize>::max(), '\n');
+			cin.clear();
+		}
+		else if (command == "1.5") {
+			cin >> output_power_to_dissipation_ratio_on_target_distance_coefficient;
+			cin.ignore(numeric_limits<streamsize>::max(), '\n');
+			cin.clear();
+		}
+		else {
+			cout << "Wrong number" << endl;
+		}
+	}
+}
 void Showhelp() {
 	cout << endl;
 	cout << "This program is created to calculate a desirable properties of a device," << endl;
@@ -860,33 +1006,39 @@ void Showhelp() {
 	cout << "It`s circle - shaped and has a diameter d1. Together this two holes creare a wave, that" << endl;
 	cout << "interferes with itself, creating areas, where the wave completely cancels itself out." << endl;
 	cout << "If you now place a barier with a circular hole with right diameter, theoretically, you" << endl;
-	cout << "shound get a direct soundwave. The distance from the hole to the barier is H." << endl;
+	cout << "shoud get a direct soundwave. The distance from the hole to the barier is H." << endl;
 	cout << endl;
 	cout << "List of commands:" << endl;
 	cout << "    help" << endl;
 	cout << "        shows help" << endl << endl;
 	cout << "    exit" << endl;
 	cout << "        breaks the program" << endl << endl;
+	cout << "    settings" << endl;
+	cout << "        show and change program settings" << endl << endl;
+	cout << "    save image" << endl;
+	cout << "        saves current screen image in a file" << endl << endl;
+	cout << "    get intensity in point" << endl;
+	cout << "        you tap on a point on a simulation and get intensity in that point" << endl;
 	cout << "    show data" << endl;
 	cout << "        shows shape data" << endl << endl;
-	cout << "    show slice" << endl;
+	cout << "    show inner wave slice" << endl;
 	cout << "        shows wave slice on chosen H" << endl << endl;
-	cout << "    show slice phase" << endl;
+	cout << "    show inner wave slice phase" << endl;
 	cout << "        shows wave phase slice on chosen H" << endl << endl;
-	cout << "    show profile" << endl;
+	cout << "    show inner wave profile" << endl;
 	cout << "        shows wave profile" << endl << endl;
-	cout << "    show profile phase" << endl;
+	cout << "    show inner wave profile phase" << endl;
 	cout << "        shows wave phase profile before the wall" << endl << endl;
-	cout << "    show after wall" << endl;
+	cout << "    show output wave profile" << endl;
 	cout << "        shows wave profile after exiting the wall" << endl << endl;
-	cout << "    show after wall phase" << endl;
+	cout << "    show output wave profile phase" << endl;
 	cout << "        shows wave phase profile after exiting the wall" << endl << endl;
 	cout << "    successive approach" << endl;
 	cout << "        relatively fast and effective way to optimize the shape to a closest maximum" << endl << endl;
 	cout << "    picking method" << endl;
-	cout << "        slowly, but surely finds best shape properties" << endl;
+	cout << "        slowly, but surely finds best shape properties" << endl << endl;
 	cout << "    local maximum" << endl;
-	cout << "        a very fast way to bring your shape to the closest maximum. not reccomended to use, since it does not work very well.";
+	cout << "        a very fast way to bring your shape to the closest maximum. not reccomended to use, since it does not work very well." << endl << endl;
 	cout << "    H" << endl;
 	cout << "        changes value of viewing height" << endl << endl;
 	cout << "    R" << endl;
@@ -915,29 +1067,38 @@ void Execute(std::string command) {
 	else if (command == "exit") {
 		exit(0);
 	}
+	else if (command == "settings") {
+		Settings();
+	}
+	else if (command == "save image") {
+		main_image.save("Simulation.bmp", time(0));
+	}
+	else if (command == "get intensity in point") {
+		main_shape.get_intensity_in_point();
+	}
 	else if (command == "show data") {
 		main_shape.print_data();
 	}
-	else if (command == "show slice") {
+	else if (command == "show inner wave slice") {
 		main_shape.show_slice();
 		main_shape.print_data();
 	}
-	else if (command == "show slice phase") {
+	else if (command == "show inner wave slice phase") {
 		main_shape.show_slice_phase();
 		main_shape.print_data();
 	}
-	else if (command == "show profile") {
+	else if (command == "show inner wave profile") {
 		main_shape.show_profile();
 		main_shape.print_data();
 	}
-	else if (command == "show profile phase") {
+	else if (command == "show inner wave profile phase") {
 		main_shape.show_profile_phase();
 		main_shape.print_data();
 	}
-	else if (command == "show after wall") {
+	else if (command == "show output wave profile") {
 		main_shape.show_after_wall();
 	}
-	else if (command == "show after wall phase") {
+	else if (command == "show output wave profile phase") {
 		main_shape.show_after_wall_phase();
 	}
 	else if (command == "local maximum") {
@@ -945,12 +1106,45 @@ void Execute(std::string command) {
 		double optimisation_value;
 		cout << "Enter number of iterations: ";
 		cin >> number_of_iterations;
+		cin.ignore(numeric_limits<streamsize>::max(), '\n');
+		cin.clear();
 		cout << "Enter the optimisation value: ";
 		cin >> optimisation_value;
+		cin.ignore(numeric_limits<streamsize>::max(), '\n');
+		cin.clear();
 		main_shape.find_local_maximum(number_of_iterations, optimisation_value, 1, 0.3);
 	}
 	else if (command == "successive approach") {
-		main_shape.successive_approach(1, 0.1, 0.1);
+		cout << "'Local maximum' function tries to optimize the shape using a given parameter, named 'optimisation value'." << endl;
+		cout << "It determines, how much will the shape change during evolution process. High OV will optimize the shape" << endl;
+		cout << "very fast, but roughly. Low OV will work slowly, but accurately. To ensure both quality and speed, this" << endl;
+		cout << "function uses various optimisation value. First it`s hight (START), then, during the optimisation" << endl;
+		cout << "process, every iteration it gets a bit lower (STEP), until it reaches the minimal value (END). Then the" << endl;
+		cout << "cycle stops." << endl << endl;
+
+		double start, end, step;
+		while (1) {
+			cout << "Enter START:    " << endl;
+			cin >> start;
+			cin.ignore(numeric_limits<streamsize>::max(), '\n');
+			cin.clear();
+			cout << "Enter END:      " << endl;
+			cin >> end;
+			cin.ignore(numeric_limits<streamsize>::max(), '\n');
+			cin.clear();
+			cout << "Enter STEP:     " << endl;
+			cin >> step;
+			cin.ignore(numeric_limits<streamsize>::max(), '\n');
+			cin.clear();
+
+			if (step > 0 & start > end) {
+				break;
+			}
+			else {
+				cout << "You entered wrong values. STEP must be higher than zero. START must be higher than END." << endl;
+			}
+		}
+		main_shape.successive_approach(start, end, step);
 	}
 	else if (command == "picking method") {
 		main_shape.picking_method();
